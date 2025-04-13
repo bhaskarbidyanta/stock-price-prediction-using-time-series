@@ -21,7 +21,7 @@ ticker = st.sidebar.selectbox("Select a Stock", stocks)
 start = st.sidebar.date_input("Start Date", date(2015, 1, 1))
 end = st.sidebar.date_input("End Date", date.today())
 
-n_years = start.year - end.year
+n_years = end.year - start.year
 period = n_years * 365
 #if period <= 0:
 #    st.sidebar.error("End date must be after start date.")
@@ -80,3 +80,46 @@ else:
 
 st.write("🔍 First few rows of the uploaded data:")
 st.write(df.head())
+
+date_col = next((col for col in df.columns if "Date" in col), None)
+close_col = next((col for col in df.columns if "Close" in col), None)
+
+# ✅ Validate required columns
+if date_col is None or close_col is None:
+    st.error("❌ Required columns containing 'Date' and 'Close' not found. Please upload valid stock data.")
+else:
+    df_train = df[[date_col, close_col]].copy()
+    df_train.rename(columns={date_col: "ds", close_col: "y"}, inplace=True)
+
+    df_train['ds'] = pd.to_datetime(df_train['ds'], errors='coerce')
+    df_train['y'] = pd.to_numeric(df_train['y'], errors='coerce')
+    df_train.dropna(subset=['ds', 'y'], inplace=True)
+
+    st.write("✅ Sample Data Passed to Prophet:")
+    st.write(df_train.head())
+
+    model = Prophet()
+    model.fit(df_train)
+    if period<=0:
+        st.error("❌ 'period' must be a positive number of future days to predict. Currently it is set to: {}".format(period))
+    else:
+        future = model.make_future_dataframe(periods=period)
+        forecast = model.predict(future)
+
+        st.subheader("📊 Forecast Data")
+        st.write(forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail())
+
+        fig1, ax1 = plt.subplots(figsize=(12, 5))
+        ax1.plot(forecast['ds'], forecast['yhat'], label='Predicted', color='green')
+        ax1.fill_between(forecast['ds'], forecast['yhat_lower'], forecast['yhat_upper'], alpha=0.3, color='gray')
+        ax1.set_title("📈 Forecasted Prices")
+        ax1.set_xlabel("Date")
+        ax1.set_ylabel("Price")
+        ax1.legend()
+        ax1.grid(True)
+        plt.xticks(rotation=45)
+        st.pyplot(fig1)
+
+        st.subheader("🔍 Forecast Components")
+        st.pyplot(model.plot_components(forecast))
+
